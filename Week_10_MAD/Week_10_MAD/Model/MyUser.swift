@@ -7,9 +7,10 @@
 
 import Foundation
 
-struct MyUser {
+struct MyUser: Codable {
     var uid: String = ""
     var email: String = ""
     var name: String = ""
     var password: String = ""
+    var achievements: [String] = [] 
 }
