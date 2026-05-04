@@ -9,51 +9,67 @@ import Foundation
 import Combine
 import FirebaseFirestore
 
+// Constrain all published updates and Firestore callbacks to the main actor for UI safety
+@MainActor
 class StoryViewModel: ObservableObject {
-    @Published var nodes: [StoryNode] = []
-    private let db = Firestore.firestore()
+    @Published var nodes: [StoryNode] = [] // Live, in-memory cache of all story nodes mirrored from Firestore
+    private let db = Firestore.firestore() // Shared Firestore instance
 
     func fetchNodes() {
+        // Attach a real-time listener so local state stays in sync with the backend.
+        // addSnapshotListener delivers initial data and subsequent updates (adds/changes/deletes).
+        // The listener closure may be invoked on a background queue; @MainActor ensures UI-safe assignment.
         db.collection("storyNodes").addSnapshotListener { [weak self] snapshot, _ in
-            guard let documents = snapshot?.documents else { return }
-            self?.nodes = documents.compactMap { try? $0.data(as: StoryNode.self) }
+            guard let documents = snapshot?.documents else { return } // If snapshot is nil (e.g., permission issues), do nothing
+            self?.nodes = documents.compactMap { try? $0.data(as: StoryNode.self) } // Decode each document into StoryNode; silently drop malformed docs
         }
     }
 
     func addNode(_ node: StoryNode) {
-        try? db.collection("storyNodes").document(node.id).setData(from: node)
+        // setData(from:) encodes the model using Codable; using document(id) makes writes idempotent per node.id
+        try? db.collection("storyNodes").document(node.id).setData(from: node) // Swallow errors for now; consider surfacing to UI/logging
     }
 
     func updateNode(_ node: StoryNode) {
-        try? db.collection("storyNodes").document(node.id).setData(from: node)
+        // Update is implemented as a full overwrite to keep schema consistent; partial updates could use updateData(_).
+        try? db.collection("storyNodes").document(node.id).setData(from: node) // Same as add: id-based upsert
     }
 
     func deleteNode(_ node: StoryNode) {
+        // Remove document; the snapshot listener will observe this and update local cache automatically
         db.collection("storyNodes").document(node.id).delete()
     }
 
     var storyTitles: [String] {
+        // Unique, alphabetized list of story titles derived from current nodes
         Array(Set(nodes.map { $0.storyTitle })).sorted()
     }
 
     func entryNode(for title: String) -> StoryNode? {
+        // Find the designated entry point node for a given story title
         nodes.first { $0.storyTitle == title && $0.isEntryPoint }
     }
 
     func node(byId id: String) -> StoryNode? {
+        // Lookup helper to resolve StoryChoice.nextNodeId to a concrete node
         nodes.first { $0.id == id }
     }
 
     // MARK: - Seed helpers
 
+    // These methods populate Firestore with sample stories. They are safe to call multiple times.
     // Only seeds if story doesn't already exist in Firestore
     private func seedIfNeeded(storyTitle: String, nodes: [StoryNode]) {
-        let exists = self.nodes.contains { $0.storyTitle == storyTitle }
-        guard !exists else { return }
-        nodes.forEach { addNode($0) }
+        // Only writes the provided nodes if we don't already have any node with the same storyTitle.
+        // This is a coarse idempotency check at the view-model layer; it does not guard against partial seeds.
+        let exists = self.nodes.contains { $0.storyTitle == storyTitle } // Checks current in-memory cache, which mirrors Firestore via listener
+        guard !exists else { return } // Abort seeding if story already present
+        nodes.forEach { addNode($0) } // Bulk upsert each node; snapshot listener will reflect results
     }
 
     func seedNinja() {
+        // Define deterministic ids so choices can reference next nodes reliably across runs
+        // Minimal branching narrative graph for demo purposes
         let id1 = "ninja-1"
         let id2 = "ninja-2"
         let id3 = "ninja-3"
@@ -106,10 +122,12 @@ class StoryViewModel: ObservableObject {
                 isEntryPoint: false
             )
         ]
-        seedIfNeeded(storyTitle: "Jalan Ninja", nodes: newNodes)
+        seedIfNeeded(storyTitle: "Jalan Ninja", nodes: newNodes) // Write only if not already present
     }
 
     func seedRomance() {
+        // Define deterministic ids so choices can reference next nodes reliably across runs
+        // Minimal branching narrative graph for demo purposes
         let id1 = "sakura-1"
         let id2 = "sakura-2"
         let id3 = "sakura-3"
@@ -151,10 +169,12 @@ class StoryViewModel: ObservableObject {
                 isEntryPoint: false
             )
         ]
-        seedIfNeeded(storyTitle: "Sakura Terakhir", nodes: newNodes)
+        seedIfNeeded(storyTitle: "Sakura Terakhir", nodes: newNodes) // Write only if not already present
     }
 
     func seedPirate() {
+        // Define deterministic ids so choices can reference next nodes reliably across runs
+        // Minimal branching narrative graph for demo purposes
         let id1 = "pirate-1"
         let id2 = "pirate-2"
         let id3 = "pirate-3"
@@ -204,6 +224,7 @@ class StoryViewModel: ObservableObject {
                 isEntryPoint: false
             )
         ]
-        seedIfNeeded(storyTitle: "Tekad Sang Kapten", nodes: newNodes)
+        seedIfNeeded(storyTitle: "Tekad Sang Kapten", nodes: newNodes) // Write only if not already present
     }
 }
+

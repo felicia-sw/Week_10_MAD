@@ -12,5 +12,5 @@ struct MyUser: Codable {
     var email: String = ""
     var name: String = ""
     var password: String = ""
-    var achievements: [String] = [] 
+//    var achievements: [String] = [] 
 }
