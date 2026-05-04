@@ -16,6 +16,7 @@ class AuthViewModel: ObservableObject {
     @Published var isSignedIn: Bool = false
     @Published var myUser: MyUser = MyUser()
     @Published var errorMessage: String = ""
+    @Published var achievements: [String] = []   // list of completed story titles
 
     private let db = Firestore.firestore()
 
@@ -23,10 +24,15 @@ class AuthViewModel: ObservableObject {
         checkUserSession()
     }
 
+    // MARK: - Session
+
     func checkUserSession() {
         self.user = Auth.auth().currentUser
         self.isSignedIn = self.user != nil
+        if isSignedIn { fetchAchievements() }
     }
+
+    // MARK: - Sign in
 
     func signIn() async {
         errorMessage = ""
@@ -42,6 +48,8 @@ class AuthViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Sign up
+
     func signUp() async {
         errorMessage = ""
         do {
@@ -49,15 +57,13 @@ class AuthViewModel: ObservableObject {
                 withEmail: myUser.email,
                 password: myUser.password
             )
-
-            // Save name + email to Firestore under "users/{uid}"
             let uid = result.user.uid
             try await db.collection("users").document(uid).setData([
                 "uid": uid,
                 "name": myUser.name,
-                "email": myUser.email
+                "email": myUser.email,
+                "achievements": []
             ])
-
             checkUserSession()
             myUser = MyUser()
         } catch {
@@ -65,8 +71,35 @@ class AuthViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Sign out
+
     func signOut() {
         try? Auth.auth().signOut()
+        achievements = []
         checkUserSession()
+    }
+
+    // MARK: - Achievements
+
+    /// Fetches the user's achievements array from Firestore
+    func fetchAchievements() {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        db.collection("users").document(uid).addSnapshotListener { [weak self] snapshot, _ in
+            guard let data = snapshot?.data() else { return }
+            self?.achievements = data["achievements"] as? [String] ?? []
+        }
+    }
+
+    /// Appends a story title to the user's achievements (no duplicates)
+    func addAchievement(_ storyTitle: String) async {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        guard !achievements.contains(storyTitle) else { return }
+        do {
+            try await db.collection("users").document(uid).updateData([
+                "achievements": FieldValue.arrayUnion([storyTitle])
+            ])
+        } catch {
+            print("Achievement save error: \(error.localizedDescription)")
+        }
     }
 }

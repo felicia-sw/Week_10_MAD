@@ -10,12 +10,18 @@ import Firebase
 
 @main
 struct Week_10_MADApp: App {
-    @StateObject var authVM = AuthViewModel()
-    
+    @StateObject var authVM: AuthViewModel
+
     init() {
-        FirebaseApp.configure()
+        // Firebase MUST be configured before any Firebase service is touched.
+        // AuthViewModel's init calls Auth.auth().currentUser, so configure first.
+        if FirebaseApp.app() == nil {
+            FirebaseApp.configure()
+        }
+        // Now safe to create AuthViewModel
+        _authVM = StateObject(wrappedValue: AuthViewModel())
     }
-    
+
     var body: some Scene {
         WindowGroup {
             ContentView()

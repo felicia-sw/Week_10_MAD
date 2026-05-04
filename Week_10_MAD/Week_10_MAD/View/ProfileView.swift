@@ -15,6 +15,7 @@ struct ProfileView: View {
     var body: some View {
         NavigationStack {
             List {
+                // --- User info ---
                 Section {
                     HStack {
                         Spacer()
@@ -32,20 +33,30 @@ struct ProfileView: View {
                     .padding(.vertical)
                 }
 
+                // --- Achievements (live from Firestore) ---
                 Section("Achievements") {
-                    HStack {
-                        Image(systemName: "star.fill")
-                            .foregroundColor(.orange)
-                        VStack(alignment: .leading) {
-                            Text("Langkah Awal")
-                                .font(.subheadline).bold()
-                            Text("Satu cerita selesai.")
-                                .font(.caption)
-                                .foregroundColor(.gray)
+                    if authVM.achievements.isEmpty {
+                        Text("Belum ada cerita yang selesai.")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    } else {
+                        ForEach(authVM.achievements, id: \.self) { title in
+                            HStack {
+                                Image(systemName: "star.fill")
+                                    .foregroundColor(.orange)
+                                VStack(alignment: .leading) {
+                                    Text(title)
+                                        .font(.subheadline).bold()
+                                    Text("Cerita selesai.")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+                            }
                         }
                     }
                 }
 
+                // --- Seed Data ---
                 Section("Seed Data") {
                     Button {
                         storyVM.seedPirate()
@@ -90,6 +101,7 @@ struct ProfileView: View {
                     }
                 }
 
+                // --- Logout ---
                 Section {
                     Button("Keluar Akun") {
                         authVM.signOut()

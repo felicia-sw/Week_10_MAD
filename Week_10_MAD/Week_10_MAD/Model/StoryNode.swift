@@ -8,15 +8,36 @@
 import Foundation
 
 struct StoryChoice: Identifiable, Codable {
-    var id: String = UUID().uuidString
-    var label: String = ""        // The button text e.g. "Meditasi Chakra"
-    var nextNodeId: String = ""   // Which node to go to next
+    var id: String
+    var label: String
+    var nextNodeId: String
+
+    // Provide defaults so you can still write StoryChoice() or StoryChoice(label:nextNodeId:)
+    init(id: String = UUID().uuidString, label: String = "", nextNodeId: String = "") {
+        self.id = id
+        self.label = label
+        self.nextNodeId = nextNodeId
+    }
 }
 
 struct StoryNode: Identifiable, Codable {
-    var id: String = UUID().uuidString
-    var storyTitle: String = ""       // Which story this belongs to
-    var narrative: String = ""        // The story text shown to the player
-    var choices: [StoryChoice] = []   // The choice buttons
-    var isEntryPoint: Bool = false    // Is this the first node of the story?
+    var id: String
+    var storyTitle: String
+    var narrative: String
+    var choices: [StoryChoice]
+    var isEntryPoint: Bool
+
+    init(
+        id: String = UUID().uuidString,
+        storyTitle: String = "",
+        narrative: String = "",
+        choices: [StoryChoice] = [],
+        isEntryPoint: Bool = false
+    ) {
+        self.id = id
+        self.storyTitle = storyTitle
+        self.narrative = narrative
+        self.choices = choices
+        self.isEntryPoint = isEntryPoint
+    }
 }
