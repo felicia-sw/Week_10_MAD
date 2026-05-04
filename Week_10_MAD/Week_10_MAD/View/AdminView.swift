@@ -14,30 +14,18 @@ struct AdminView: View {
     var body: some View {
         NavigationStack {
             List {
-                ForEach(storyVM.storyTitles, id: \.self) { title in
-                    Section(header: Text(title)) {
-                        ForEach(storyVM.nodes.filter { $0.storyTitle == title }) { node in
-                            NavigationLink(destination: EditNodeView(node: node)) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    if node.isEntryPoint {
-                                        Text("Entry Point")
-                                            .font(.caption)
-                                            .foregroundColor(.blue)
-                                    }
-                                    Text(node.narrative)
-                                        .lineLimit(2)
-                                        .font(.subheadline)
-                                    if !node.choices.isEmpty {
-                                        Text("\(node.choices.count) pilihan")
-                                            .font(.caption)
-                                            .foregroundColor(.gray)
-                                    }
-                                }
+                Section(header: Text("Rancangan Cerita")) {
+                    ForEach(storyVM.storyTitles, id: \.self) { title in
+                        NavigationLink(destination: StoryNodeListView(storyTitle: title)) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(title)
+                                    .font(.headline)
+                                Text(storyVM.entryNode(for: title)?.narrative ?? "")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                                    .lineLimit(2)
                             }
-                        }
-                        .onDelete { indexSet in
-                            let filtered = storyVM.nodes.filter { $0.storyTitle == title }
-                            indexSet.forEach { storyVM.deleteNode(filtered[$0]) }
+                            .padding(.vertical, 4)
                         }
                     }
                 }
@@ -57,6 +45,46 @@ struct AdminView: View {
     }
 }
 
+// MARK: - Story node list (all nodes for one story title)
+
+struct StoryNodeListView: View {
+    let storyTitle: String
+    @EnvironmentObject var storyVM: StoryViewModel
+
+    var nodes: [StoryNode] {
+        storyVM.nodes.filter { $0.storyTitle == storyTitle }
+    }
+
+    var body: some View {
+        List {
+            ForEach(nodes) { node in
+                NavigationLink(destination: EditNodeView(node: node)) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        if node.isEntryPoint {
+                            Text("Entry Point")
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                        }
+                        Text(node.narrative)
+                            .lineLimit(2)
+                            .font(.subheadline)
+                        if !node.choices.isEmpty {
+                            Text("\(node.choices.count) pilihan")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+            .onDelete { indexSet in
+                indexSet.forEach { storyVM.deleteNode(nodes[$0]) }
+            }
+        }
+        .navigationTitle(storyTitle)
+    }
+}
+
 // MARK: - Add Node
 
 struct AddNodeView: View {
@@ -67,53 +95,76 @@ struct AddNodeView: View {
     @State private var storyTitle = ""
     @State private var isEntryPoint = false
     @State private var choices: [StoryChoice] = []
+    @State private var newChoiceLabel = ""
+    @State private var newChoiceTarget = ""
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Story Info") {
-                    TextField("Story title (e.g. Jalan Ninja)", text: $storyTitle)
+                Section("Informasi Cerita") {
+                    TextField("Judul cerita (e.g. Jalan Ninja)", text: $storyTitle)
                     Toggle("Main Entry Point", isOn: $isEntryPoint)
                 }
 
-                Section("Narrative") {
+                Section("Narasi Saat Ini") {
                     TextEditor(text: $narrative)
-                        .frame(height: 120)
+                        .frame(height: 100)
                 }
 
-                Section("Choices") {
-                    // We bind by index so changes propagate correctly
+                Section("Pilihan Cabang") {
                     ForEach(choices.indices, id: \.self) { i in
-                        VStack(alignment: .leading, spacing: 6) {
-                            TextField("Choice label", text: $choices[i].label)
-                                .font(.subheadline)
-
-                            // Picker to select the destination node
-                            Picker("Goes to", selection: $choices[i].nextNodeId) {
-                                Text("— pilih node —").tag("")
-                                ForEach(storyVM.nodes.filter { $0.storyTitle == storyTitle }) { node in
-                                    Text(String(node.narrative.prefix(40)) + "…")
-                                        .tag(node.id)
-                                }
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(choices[i].label)
+                                    .font(.subheadline)
+                                Text("→ \(targetLabel(choices[i].nextNodeId))")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
                             }
-                            .pickerStyle(.menu)
-                            .font(.caption)
+                            Spacer()
+                            Button {
+                                choices.remove(at: i)
+                            } label: {
+                                Image(systemName: "trash")
+                                    .foregroundColor(.red)
+                            }
                         }
-                        .padding(.vertical, 4)
                     }
 
-                    Button(action: { choices.append(StoryChoice()) }) {
-                        Label("Add Choice", systemImage: "plus.circle")
+                    VStack(alignment: .leading, spacing: 8) {
+                        TextField("Teks Pilihan (Misal: 'Lari')", text: $newChoiceLabel)
+                            .font(.subheadline)
+
+                        Picker("Pilih Tujuan", selection: $newChoiceTarget) {
+                            Text("Pilih node tujuan").tag("")
+                            ForEach(storyVM.nodes.filter { $0.storyTitle == storyTitle }) { node in
+                                Text(String(node.narrative.prefix(50)))
+                                    .tag(node.id)
+                            }
+                        }
+                        .pickerStyle(.menu)
+
+                        Button("Simpan Cabang") {
+                            guard !newChoiceLabel.isEmpty else { return }
+                            choices.append(StoryChoice(
+                                label: newChoiceLabel,
+                                nextNodeId: newChoiceTarget
+                            ))
+                            newChoiceLabel = ""
+                            newChoiceTarget = ""
+                        }
+                        .disabled(newChoiceLabel.isEmpty)
                     }
+                    .padding(.vertical, 4)
                 }
             }
-            .navigationTitle("New Node")
+            .navigationTitle("Node Baru")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") { dismiss() }
+                    Button("Batal") { dismiss() }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
+                    Button("Simpan") {
                         let node = StoryNode(
                             id: UUID().uuidString,
                             storyTitle: storyTitle,
@@ -129,6 +180,11 @@ struct AddNodeView: View {
             }
         }
     }
+
+    func targetLabel(_ id: String) -> String {
+        guard !id.isEmpty else { return "belum dipilih" }
+        return String((storyVM.node(byId: id)?.narrative.prefix(30) ?? "?") + "…")
+    }
 }
 
 // MARK: - Edit Node
@@ -137,54 +193,83 @@ struct EditNodeView: View {
     @EnvironmentObject var storyVM: StoryViewModel
     @Environment(\.dismiss) var dismiss
     @State var node: StoryNode
+    @State private var newChoiceLabel = ""
+    @State private var newChoiceTarget = ""
 
     var body: some View {
         Form {
-            Section("Story Info") {
-                TextField("Story title", text: $node.storyTitle)
+            Section("Informasi Cerita") {
+                TextField("Judul cerita", text: $node.storyTitle)
                 Toggle("Main Entry Point", isOn: $node.isEntryPoint)
             }
 
-            Section("Narrative") {
+            Section("Narasi Saat Ini") {
                 TextEditor(text: $node.narrative)
-                    .frame(height: 120)
+                    .frame(height: 100)
             }
 
-            Section("Choices") {
+            Section("Pilihan Cabang") {
                 ForEach(node.choices.indices, id: \.self) { i in
-                    VStack(alignment: .leading, spacing: 6) {
-                        TextField("Choice label", text: $node.choices[i].label)
-                            .font(.subheadline)
-
-                        // Picker — shows all nodes in the same story (excluding self)
-                        Picker("Goes to", selection: $node.choices[i].nextNodeId) {
-                            Text("— pilih node —").tag("")
-                            ForEach(storyVM.nodes.filter {
-                                $0.storyTitle == node.storyTitle && $0.id != node.id
-                            }) { dest in
-                                Text(String(dest.narrative.prefix(40)) + "…")
-                                    .tag(dest.id)
-                            }
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(node.choices[i].label)
+                                .font(.subheadline)
+                            Text("→ \(targetLabel(node.choices[i].nextNodeId))")
+                                .font(.caption)
+                                .foregroundColor(.gray)
                         }
-                        .pickerStyle(.menu)
-                        .font(.caption)
+                        Spacer()
+                        Button {
+                            node.choices.remove(at: i)
+                        } label: {
+                            Image(systemName: "trash")
+                                .foregroundColor(.red)
+                        }
                     }
-                    .padding(.vertical, 4)
                 }
 
-                Button(action: { node.choices.append(StoryChoice()) }) {
-                    Label("Add Choice", systemImage: "plus.circle")
+                VStack(alignment: .leading, spacing: 8) {
+                    TextField("Teks Pilihan (Misal: 'Lari')", text: $newChoiceLabel)
+                        .font(.subheadline)
+
+                    Picker("Pilih Tujuan", selection: $newChoiceTarget) {
+                        Text("Pilih node tujuan").tag("")
+                        ForEach(storyVM.nodes.filter {
+                            $0.storyTitle == node.storyTitle && $0.id != node.id
+                        }) { dest in
+                            Text(String(dest.narrative.prefix(50)))
+                                .tag(dest.id)
+                        }
+                    }
+                    .pickerStyle(.menu)
+
+                    Button("Simpan Cabang") {
+                        guard !newChoiceLabel.isEmpty else { return }
+                        node.choices.append(StoryChoice(
+                            label: newChoiceLabel,
+                            nextNodeId: newChoiceTarget
+                        ))
+                        newChoiceLabel = ""
+                        newChoiceTarget = ""
+                    }
+                    .disabled(newChoiceLabel.isEmpty)
                 }
+                .padding(.vertical, 4)
             }
         }
-        .navigationTitle("Edit Node")
+        .navigationTitle("Keputusan")
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Save") {
+                Button("Simpan") {
                     storyVM.updateNode(node)
                     dismiss()
                 }
             }
         }
+    }
+
+    func targetLabel(_ id: String) -> String {
+        guard !id.isEmpty else { return "belum dipilih" }
+        return String((storyVM.node(byId: id)?.narrative.prefix(30) ?? "?") + "…")
     }
 }
